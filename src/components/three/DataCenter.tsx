@@ -5,27 +5,64 @@ import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { Environment } from './Environment';
 import { ServerRack } from './ServerRack';
 import { HeatMap } from './HeatMap';
+import { NetworkTopology } from './NetworkTopology';
 import { useDataCenterStore } from '@/store/useDataCenterStore';
-import { ServerRack as ServerRackType, ServerDevice as ServerDeviceType, TemperaturePoint } from '@/types';
+import {
+  ServerRack as ServerRackType,
+  ServerDevice as ServerDeviceType,
+  TemperaturePoint,
+  NetworkNode,
+  HistorySnapshot,
+  PlannedDevice,
+} from '@/types';
 import { useCameraControls } from '@/hooks/useCameraControls';
 
 interface DataCenterProps {
   onDeviceClick: (device: ServerDeviceType) => void;
   onDevicePointerOver: (e: any, device: ServerDeviceType) => void;
   onDevicePointerOut: () => void;
+  onNetworkNodePointerOver: (e: any, node: NetworkNode) => void;
+  onNetworkNodePointerOut: () => void;
+  snapshotA?: HistorySnapshot | null;
+  snapshotB?: HistorySnapshot | null;
+  compareMode?: boolean;
+  plannedDevices?: PlannedDevice[];
+  planningMode?: boolean;
 }
 
 const DataCenterContent = ({
   onDeviceClick,
   onDevicePointerOver,
   onDevicePointerOut,
+  onNetworkNodePointerOver,
+  onNetworkNodePointerOut,
+  snapshotA,
+  snapshotB,
+  compareMode,
+  plannedDevices,
+  planningMode,
 }: DataCenterProps) => {
-  const { racks, selectedRackId, heatMapVisible, selectRack } = useDataCenterStore();
+  const {
+    racks: liveRacks,
+    selectedRackId,
+    heatMapVisible,
+    selectRack,
+    networkNodes,
+    networkLinks,
+    networkViewVisible,
+  } = useDataCenterStore();
   const { controlsRef } = useCameraControls();
+
+  const displayRacks = useMemo(() => {
+    if (compareMode && snapshotA && snapshotB) {
+      return snapshotA.racks;
+    }
+    return liveRacks;
+  }, [compareMode, snapshotA, snapshotB, liveRacks]);
 
   const temperaturePoints = useMemo<TemperaturePoint[]>(() => {
     const points: TemperaturePoint[] = [];
-    racks.forEach((rack) => {
+    displayRacks.forEach((rack) => {
       points.push({
         x: rack.positionX,
         z: rack.positionZ,
@@ -33,7 +70,7 @@ const DataCenterContent = ({
       });
     });
     return points;
-  }, [racks]);
+  }, [displayRacks]);
 
   const handleRackClick = (rack: ServerRackType) => {
     if (selectedRackId === rack.id) {
@@ -42,6 +79,11 @@ const DataCenterContent = ({
       selectRack(rack);
     }
   };
+
+  const displayPlannedDevices = useMemo(() => {
+    if (!planningMode || !plannedDevices) return [];
+    return plannedDevices;
+  }, [planningMode, plannedDevices]);
 
   return (
     <>
@@ -61,7 +103,7 @@ const DataCenterContent = ({
 
       <Environment />
 
-      {racks.map((rack) => (
+      {displayRacks.map((rack) => (
         <ServerRack
           key={rack.id}
           rack={rack}
@@ -70,12 +112,21 @@ const DataCenterContent = ({
           onDeviceClick={onDeviceClick}
           onDevicePointerOver={onDevicePointerOver}
           onDevicePointerOut={onDevicePointerOut}
+          plannedDevices={displayPlannedDevices.filter((d) => d.rackId === rack.id)}
         />
       ))}
 
       <HeatMap
         temperaturePoints={temperaturePoints}
         visible={heatMapVisible}
+      />
+
+      <NetworkTopology
+        nodes={networkNodes}
+        links={networkLinks}
+        visible={networkViewVisible}
+        onNodePointerOver={onNetworkNodePointerOver}
+        onNodePointerOut={onNetworkNodePointerOut}
       />
 
       <EffectComposer>
